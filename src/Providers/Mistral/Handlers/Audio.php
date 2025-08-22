@@ -19,22 +19,32 @@ class Audio
 
     public function handleSpeechToText(SpeechToTextRequest $request): TextResponse
     {
-        $response = $this
-            ->client
-            ->attach(
-                'file',
-                $request->input()->resource(),
-                'audio',
-                ['Content-Type' => $request->input()->mimeType()]
-            )
-            ->post('audio/transcriptions', Arr::whereNotNull([
-                'model' => $request->model(),
-                'language' => $request->providerOptions('language') ?? null,
-                'prompt' => $request->providerOptions('prompt') ?? null,
-                'response_format' => $request->providerOptions('response_format') ?? null,
-                'temperature' => $request->providerOptions('temperature') ?? null,
-                'timestamp_granularities' => $request->providerOptions('timestamp_granularities') ?? null,
-            ]));
+        $payload = Arr::whereNotNull([
+            'model' => $request->model(),
+            'language' => $request->providerOptions('language') ?? null,
+            'prompt' => $request->providerOptions('prompt') ?? null,
+            'response_format' => $request->providerOptions('response_format') ?? null,
+            'temperature' => $request->providerOptions('temperature') ?? null,
+            'timestamp_granularities' => $request->providerOptions('timestamp_granularities') ?? null,
+        ]);
+
+        // Si c'est une URL, l'envoyer directement au lieu de télécharger le contenu
+        if ($request->input()->isUrl()) {
+            // Note: Cette approche suppose que l'API Mistral supporte l'envoi direct d'URLs
+            // Si l'API ne le supporte pas, il faudra revenir à l'approche multipart
+            $payload['file'] = $request->input()->url();
+            $response = $this->client->post('audio/transcriptions', $payload);
+        } else {
+            $response = $this
+                ->client
+                ->attach(
+                    'file',
+                    $request->input()->resource(),
+                    'audio',
+                    ['Content-Type' => $request->input()->mimeType()]
+                )
+                ->post('audio/transcriptions', $payload);
+        }
 
         if (json_validate($response->body())) {
             $data = $response->json();

@@ -62,12 +62,7 @@ Voxtral automatically detects languages or you can specify them for better accur
 
 ```php
 $response = Prism::audio()
-    ->using('mistral', 'voxtral-mini-2507')
-    ->withInput($audioFile)
-    ->withProviderOptions([
-        'language' => 'en',           // ISO-639-1 code (optional)
-        'temperature' => 0.0,         // Lower for more deterministic results
-    ])
+    ->using('mistral', 'voxtral-mini-2507' 
     ->asText();
 
 // Multilingual support - single model handles multiple languages
