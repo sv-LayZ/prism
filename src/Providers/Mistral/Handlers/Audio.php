@@ -28,10 +28,7 @@ class Audio
             'timestamp_granularities' => $request->providerOptions('timestamp_granularities') ?? null,
         ]);
 
-        // Si c'est une URL, l'envoyer directement au lieu de télécharger le contenu
         if ($request->input()->isUrl()) {
-            // Note: Cette approche suppose que l'API Mistral supporte l'envoi direct d'URLs
-            // Si l'API ne le supporte pas, il faudra revenir à l'approche multipart
             $payload['file'] = $request->input()->url();
             $response = $this->client->post('audio/transcriptions', $payload);
         } else {
