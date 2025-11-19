@@ -25,6 +25,25 @@ Prism::text() // [!code focus]
 > [!NOTE]
 > Using `withProviderOptions` will override settings like `topP` and `temperature`
 
+### Keep Alive
+
+The `keep_alive` parameter controls how long Ollama keeps the model loaded in memory after generating a response. This can be useful for managing memory usage and response times.
+
+```php
+Prism::text()
+  ->using(Provider::Ollama, 'gemma3:1b')
+  ->withPrompt('Who are you?')
+  ->withProviderOptions([
+      'keep_alive' => '10m', // Keep model loaded for 10 minutes
+  ])
+```
+
+The `keep_alive` parameter accepts:
+- **Duration string**: `"10m"`, `"24h"`, etc.
+- **Number in seconds**: `3600`, `300`, etc.
+- **Negative values** (keep indefinitely): `-1`, `"-1m"`, etc.
+- **Zero** (unload immediately): `0`
+
 ## Streaming
 
 Ollama supports streaming responses from your local models. All standard streaming methods are supported:
