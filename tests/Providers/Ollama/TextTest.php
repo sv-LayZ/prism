@@ -246,6 +246,32 @@ describe('Keep alive parameter', function (): void {
             return true;
         });
     });
+
+    it('excludes keep_alive from options array when provided', function (): void {
+        FixtureResponse::fakeResponseSequence('api/chat', 'ollama/generate-text-with-a-prompt');
+
+        Prism::text()
+            ->using('ollama', 'qwen2.5:14b')
+            ->withPrompt('Test prompt')
+            ->withProviderOptions(['keep_alive' => '10m', 'num_ctx' => 4096])
+            ->asText();
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            // keep_alive should be at top level
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe('10m');
+            
+            // keep_alive should NOT be in options array
+            expect($body['options'])->not->toHaveKey('keep_alive');
+            
+            // other provider options should still be in options
+            expect($body['options'])->toHaveKey('num_ctx');
+            expect($body['options']['num_ctx'])->toBe(4096);
+
+            return true;
+        });
+    });
 });
 
 describe('Image support', function (): void {

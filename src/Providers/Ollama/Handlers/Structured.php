@@ -88,7 +88,7 @@ class Structured
                 'temperature' => $request->temperature(),
                 'num_predict' => $request->maxTokens() ?? 2048,
                 'top_p' => $request->topP(),
-            ], $request->providerOptions())),
+            ], Arr::except($request->providerOptions(), ['keep_alive']))),
         ]);
 
         return $response->json();

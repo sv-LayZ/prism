@@ -48,7 +48,7 @@ class Embeddings
                 'model' => $request->model(),
                 'input' => $request->inputs(),
                 'keep_alive' => $request->providerOptions('keep_alive'),
-                'options' => $request->providerOptions() ?: null,
+                'options' => Arr::except($request->providerOptions(), ['keep_alive']) ?: null,
             ])
         );
     }
