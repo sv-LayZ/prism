@@ -6,9 +6,11 @@ namespace Tests\Providers\OpenAI;
 
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Prism\Prism\Enums\Provider;
 use Prism\Prism\Exceptions\PrismException;
+use Prism\Prism\Facades\Prism;
 use Prism\Prism\Facades\Tool;
-use Prism\Prism\Prism;
+use Prism\Prism\Streaming\Events\ProviderToolEvent;
 use Prism\Prism\Streaming\Events\StreamEndEvent;
 use Prism\Prism\Streaming\Events\StreamStartEvent;
 use Prism\Prism\Streaming\Events\TextDeltaEvent;
@@ -86,6 +88,7 @@ it('can generate text using tools with streaming', function (): void {
     $events = [];
     $toolCalls = [];
     $toolResults = [];
+    $providerToolEvents = [];
 
     foreach ($response as $event) {
         $events[] = $event;
@@ -101,11 +104,16 @@ it('can generate text using tools with streaming', function (): void {
         if ($event instanceof TextDeltaEvent) {
             $text .= $event->delta;
         }
+
+        if ($event instanceof ProviderToolEvent) {
+            $providerToolEvents[] = $event;
+        }
     }
 
     expect($events)->not->toBeEmpty();
     expect($toolCalls)->toHaveCount(2);
     expect($toolResults)->toHaveCount(2);
+    expect($providerToolEvents)->toBeEmpty();
 
     // Verify the HTTP request
     Http::assertSent(function (Request $request): bool {
@@ -299,6 +307,59 @@ it('can process a complete conversation with provider tool', function (): void {
     Http::assertSentCount(1);
 });
 
+it('can process streaming with image_generation provider tool', function (): void {
+    FixtureResponse::fakeResponseSequence('v1/responses', 'openai/stream-with-image-generation');
+
+    $tools = [
+        new ProviderTool('image_generation'),
+    ];
+
+    $response = Prism::text()
+        ->using('openai', 'gpt-4o')
+        ->withProviderTools($tools)
+        ->withMaxSteps(5)
+        ->withPrompt('Generate an image of a sunset over mountains')
+        ->asStream();
+
+    $answerText = '';
+    $providerToolEvents = [];
+    $imageData = null;
+
+    foreach ($response as $event) {
+        if ($event instanceof TextDeltaEvent) {
+            $answerText .= $event->delta;
+        }
+
+        if ($event instanceof ProviderToolEvent) {
+            $providerToolEvents[] = $event;
+
+            if ($event->toolType === 'image_generation_call' && $event->status === 'completed') {
+                $imageData = $event->data['result'] ?? null;
+            }
+        }
+    }
+
+    expect($providerToolEvents)->not->toBeEmpty();
+
+    $statuses = array_map(fn (\Prism\Prism\Streaming\Events\ProviderToolEvent $e): string => $e->status, $providerToolEvents);
+    expect($statuses)->toContain('in_progress');
+    expect($statuses)->toContain('generating');
+    expect($statuses)->toContain('completed');
+
+    foreach ($providerToolEvents as $event) {
+        expect($event->toolType)->toBe('image_generation_call');
+        expect($event->itemId)->toStartWith('ig_');
+        expect($event->eventKey())->toStartWith('provider_tool_event.image_generation_call.');
+    }
+
+    expect($imageData)->not->toBeNull();
+    expect($imageData)->toStartWith('iVBORw0KGgo');
+
+    expect($answerText)->not->toBeEmpty();
+
+    Http::assertSentCount(1);
+});
+
 it('can pass parallel tool call setting', function (): void {
     FixtureResponse::fakeResponseSequence('v1/responses', 'openai/stream-multi-tool-conversation-responses');
 
@@ -434,4 +495,98 @@ it('exposes response_id in stream end event', function (): void {
 
     expect($array)->toHaveKey('response_id')
         ->and($array['response_id'])->toBe('resp_6859a4ad7d3c81999e9e02548c91e2a8077218073e9990d3');
+});
+
+it('uses meta to set service_tier', function (): void {
+    FixtureResponse::fakeResponseSequence('v1/responses', 'openai/stream-reasoning-effort');
+
+    $serviceTier = 'priority';
+
+    $response = Prism::text()
+        ->using('openai', 'gpt-5')
+        ->withPrompt('Who are you?')
+        ->withProviderOptions([
+            'service_tier' => $serviceTier,
+        ])
+        ->asStream();
+
+    // process stream
+    collect($response);
+
+    Http::assertSent(fn (Request $request): bool => $request->data()['service_tier'] === $serviceTier);
+});
+
+it('filters service_tier if null', function (): void {
+    FixtureResponse::fakeResponseSequence('v1/responses', 'openai/stream-reasoning-effort');
+
+    $response = Prism::text()
+        ->using('openai', 'gpt-5')
+        ->withPrompt('Who are you?')
+        ->withProviderOptions([
+            'service_tier' => null,
+        ])
+        ->asStream();
+
+    // process stream
+    collect($response);
+
+    Http::assertSent(function (Request $request): bool {
+        expect($request->data())->not()->toHaveKey('service_tier');
+
+        return true; // Assertion will fail
+    });
+});
+
+it('uses meta to set text_verbosity', function (): void {
+    FixtureResponse::fakeResponseSequence(
+        'v1/responses',
+        'openai/generate-text-with-a-prompt'
+    );
+
+    $textVerbosity = 'medium';
+
+    $response = Prism::text()
+        ->using(Provider::OpenAI, 'gpt-4o')
+        ->withPrompt('Who are you?')
+        ->withProviderOptions([
+            'text_verbosity' => $textVerbosity,
+        ])
+        ->asStream();
+
+    // process stream
+    collect($response);
+
+    Http::assertSent(function (Request $request) use ($textVerbosity): true {
+        $body = json_decode($request->body(), true);
+
+        expect(data_get($body, 'text.verbosity'))->toBe($textVerbosity);
+
+        return true;
+    });
+});
+
+it('filters text_verbosity if null', function (): void {
+    FixtureResponse::fakeResponseSequence(
+        'v1/responses',
+        'openai/generate-text-with-a-prompt'
+    );
+
+    $response = Prism::text()
+        ->using(Provider::OpenAI, 'gpt-4o')
+        ->withPrompt('Who are you?')
+        ->withProviderOptions([
+            'text_verbosity' => null,
+        ])
+        ->asText();
+
+    // process stream
+    collect($response);
+
+    Http::assertSent(function (Request $request): true {
+        $body = json_decode($request->body(), true);
+
+        expect($body)->not()->toHaveKey('text.verbosity');
+
+        return true;
+    });
 });

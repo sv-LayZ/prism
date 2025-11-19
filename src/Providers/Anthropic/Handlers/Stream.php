@@ -16,6 +16,7 @@ use Prism\Prism\Providers\Anthropic\ValueObjects\AnthropicStreamState;
 use Prism\Prism\Streaming\EventID;
 use Prism\Prism\Streaming\Events\CitationEvent;
 use Prism\Prism\Streaming\Events\ErrorEvent;
+use Prism\Prism\Streaming\Events\ProviderToolEvent;
 use Prism\Prism\Streaming\Events\StreamEndEvent;
 use Prism\Prism\Streaming\Events\StreamEvent;
 use Prism\Prism\Streaming\Events\StreamStartEvent;
@@ -152,6 +153,9 @@ class Stream
             ),
             'thinking' => $this->handleThinkingStart(),
             'tool_use' => $this->handleToolUseStart($contentBlock),
+            'server_tool_use' => $this->handleProviderToolUseStart($contentBlock),
+            'web_search_tool_result' => $this->handleProviderToolResultStart($contentBlock),
+            'web_fetch_tool_result' => $this->handleProviderToolResultStart($contentBlock),
             default => null,
         };
     }
@@ -170,6 +174,7 @@ class Stream
             ['thinking', 'thinking_delta'] => $this->handleThinkingDelta($delta),
             ['thinking', 'signature_delta'] => $this->handleSignatureDelta($delta),
             ['tool_use', 'input_json_delta'] => $this->handleToolInputDelta($delta),
+            ['server_tool_use', 'input_json_delta'] => $this->handleProviderToolInputDelta($delta),
             default => null,
         };
     }
@@ -191,6 +196,7 @@ class Stream
                 reasoningId: $this->state->reasoningId()
             ),
             'tool_use' => $this->handleToolUseComplete(),
+            'server_tool_use' => $this->handleProviderToolUseComplete(),
             default => null,
         };
 
@@ -448,17 +454,10 @@ class Stream
 
                 $toolResults[] = $toolResult;
 
-                $resultObj = new ToolResult(
-                    toolCallId: $toolCall->id,
-                    toolName: $toolCall->name,
-                    args: $toolCall->arguments(),
-                    result: is_array($result) ? $result : ['result' => $result]
-                );
-
                 yield new ToolResultEvent(
                     id: EventID::generate(),
                     timestamp: time(),
-                    toolResult: $resultObj,
+                    toolResult: $toolResult,
                     messageId: $this->state->messageId(),
                     success: true
                 );
@@ -498,6 +497,81 @@ class Stream
                 yield from $this->processStream($nextResponse, $request, $depth);
             }
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $contentBlock
+     */
+    protected function handleProviderToolUseStart(array $contentBlock): ProviderToolEvent
+    {
+        if ($this->state->currentBlockIndex() !== null) {
+            $this->state->addProviderToolCall($this->state->currentBlockIndex(), [
+                'type' => $contentBlock['type'] ?? 'server_tool_use',
+                'id' => $contentBlock['id'] ?? EventID::generate(),
+                'name' => $contentBlock['name'] ?? 'unknown',
+                'input' => '',
+            ]);
+        }
+
+        return new ProviderToolEvent(
+            id: EventID::generate(),
+            timestamp: time(),
+            toolType: $contentBlock['name'] ?? 'unknown',
+            status: 'started',
+            itemId: $contentBlock['id'],
+            data: $contentBlock,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $delta
+     */
+    protected function handleProviderToolInputDelta(array $delta): null
+    {
+        $partialJson = $delta['partial_json'] ?? '';
+
+        if ($this->state->currentBlockIndex() !== null && isset($this->state->providerToolCalls()[$this->state->currentBlockIndex()])) {
+            $this->state->appendProviderToolCallInput($this->state->currentBlockIndex(), $partialJson);
+        }
+
+        return null;
+    }
+
+    protected function handleProviderToolUseComplete(): ?ProviderToolEvent
+    {
+        if ($this->state->currentBlockIndex() === null || ! isset($this->state->providerToolCalls()[$this->state->currentBlockIndex()])) {
+            return null;
+        }
+
+        $providerToolCall = $this->state->providerToolCalls()[$this->state->currentBlockIndex()];
+
+        return new ProviderToolEvent(
+            id: EventID::generate(),
+            timestamp: time(),
+            toolType: $providerToolCall['name'],
+            status: 'completed',
+            itemId: $providerToolCall['id'],
+            data: $providerToolCall,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $contentBlock
+     */
+    protected function handleProviderToolResultStart(array $contentBlock): ?ProviderToolEvent
+    {
+        if ($this->state->currentBlockIndex() !== null) {
+            $this->state->addProviderToolResult($this->state->currentBlockIndex(), $contentBlock);
+        }
+
+        return new ProviderToolEvent(
+            id: EventID::generate(),
+            timestamp: time(),
+            toolType: $contentBlock['type'],
+            status: 'result_received',
+            itemId: $contentBlock['tool_use_id'] ?? EventID::generate(),
+            data: $contentBlock,
+        );
     }
 
     /**

@@ -31,8 +31,8 @@ class Embeddings
         }
 
         return new EmbeddingsResponse(
-            embeddings: array_map(fn (array $item): Embedding => Embedding::fromArray($item), data_get($data, 'embeddings', [])),
-            usage: new EmbeddingsUsage(data_get($data, 'prompt_eval_count', null)),
+            embeddings: array_map(Embedding::fromArray(...), data_get($data, 'embeddings', [])),
+            usage: new EmbeddingsUsage(data_get($data, 'prompt_eval_count')),
             meta: new Meta(
                 id: '',
                 model: data_get($data, 'model', ''),

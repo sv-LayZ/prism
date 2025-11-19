@@ -51,6 +51,51 @@ $response = Prism::structured()
 >
 > For more details on required vs nullable fields, see [Schemas - Required vs Nullable Fields](/core-concepts/schemas#required-vs-nullable-fields).
 
+### Combining Tools with Structured Output
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Schema\ObjectSchema;
+use Prism\Prism\Schema\StringSchema;
+use Prism\Prism\Tool;
+
+$schema = new ObjectSchema(
+    name: 'weather_analysis',
+    description: 'Analysis of weather conditions',
+    properties: [
+        new StringSchema('summary', 'Summary of the weather'),
+        new StringSchema('recommendation', 'Recommendation based on weather'),
+    ],
+    requiredFields: ['summary', 'recommendation']
+);
+
+$weatherTool = Tool::as('get_weather')
+    ->for('Get current weather for a location')
+    ->withStringParameter('location', 'The city and state')
+    ->using(fn (string $location): string => "Weather in {$location}: 72°F, sunny");
+
+$response = Prism::structured()
+    ->using('openai', 'gpt-4o')
+    ->withSchema($schema)
+    ->withTools([$weatherTool])
+    ->withMaxSteps(3)
+    ->withPrompt('What is the weather in San Francisco and should I wear a coat?')
+    ->asStructured();
+
+// Access structured output
+dump($response->structured);
+
+// Access tool execution details
+foreach ($response->toolCalls as $toolCall) {
+    echo "Called: {$toolCall->name}\n";
+}
+```
+
+> [!IMPORTANT]
+> When combining tools with structured output, set `maxSteps` to at least 2. OpenAI automatically uses the `/responses` endpoint and sets `parallel_tool_calls: false`.
+
+For complete documentation on combining tools with structured output, see [Structured Output - Combining with Tools](/core-concepts/structured-output#combining-structured-output-with-tools).
+
 ### Metadata
 
 ```php
@@ -82,6 +127,21 @@ $response = Prism::structured()
     ]) // [!code focus]
 ```
 
+### Service Tiers
+
+Prism supports OpenAI's [Service Tier Configuration](https://platform.openai.com/docs/api-reference/chat/create#chat-create-service_tier) via provider-specific meta.
+
+```php
+$response = Prism::text()
+    ->withProviderOptions([ // [!code focus]
+        'service_tier' => 'priority' // [!code focus]
+    ]) // [!code focus]
+```
+
+> [!WARNING]
+> **Priority Service Tiers increase Cost**: Using priority service tier may reduce response time but increases token costs.
+>
+> 
 ### Reasoning Models
 
 OpenAI's reasoning models like `gpt-5`, `gpt-5-mini`, and `gpt-5-nano` use advanced reasoning capabilities to think through complex problems before responding. These models excel at multi-step problem solving, coding, scientific reasoning, and complex analysis tasks.
@@ -128,6 +188,18 @@ echo "Reasoning tokens: " . $usage->thoughtTokens;
 echo "Total completion tokens: " . $usage->completionTokens;
 ```
 
+#### Text Verbosity
+
+```php
+$response = Prism::text()
+    ->using('openai', 'gpt-5')
+    ->withPrompt('Explain dependency injection')
+    ->withProviderOptions([ // [!code focus]
+        'text_verbosity' => 'low' // low, medium, high // [!code focus]
+    ]) // [!code focus]
+    ->asText();
+```
+
 ## Streaming
 
 OpenAI supports streaming responses in real-time. All the standard streaming methods work with OpenAI models:
@@ -162,7 +234,34 @@ foreach ($stream as $event) {
 }
 ```
 
-For complete streaming documentation including Vercel Data Protocol and WebSocket broadcasting, see [Streaming Output](/core-concepts/streaming-output).
+### Streaming with Provider Tools
+
+OpenAI's provider tools like `image_generation` emit streaming events during execution, letting you track progress and access results in real-time:
+
+```php
+use Prism\Prism\ValueObjects\ProviderTool;
+use Prism\Prism\Streaming\Events\ProviderToolEvent;
+
+$stream = Prism::text()
+    ->using('openai', 'gpt-4o')
+    ->withProviderTools([
+        new ProviderTool('image_generation'),
+    ])
+    ->withPrompt('Generate an image of a sunset over mountains')
+    ->asStream();
+
+foreach ($stream as $event) {
+    if ($event instanceof ProviderToolEvent) {
+        // Check when image generation completes
+        if ($event->status === 'completed' && isset($event->data['result'])) {
+            $imageData = $event->data['result']; // base64 PNG
+            file_put_contents('generated.png', base64_decode($imageData));
+        }
+    }
+}
+```
+
+For complete details on handling provider tool events, see [Streaming Output](/core-concepts/streaming-output).
 
 ### Caching
 
@@ -177,7 +276,7 @@ OpenAI offers built-in provider tools that can be used alongside your custom too
 The OpenAI code interpreter allows your AI to execute Python code in a secure, sandboxed environment. This is particularly useful for mathematical calculations, data analysis, and code execution tasks.
 
 ```php
-use Prism\Prism\Prism;
+use Prism\Prism\Facades\Prism;
 use Prism\Prism\ValueObjects\ProviderTool;
 
 Prism::text()
@@ -382,7 +481,7 @@ Convert text into natural-sounding speech with various voice options:
 #### Basic TTS Usage
 
 ```php
-use Prism\Prism\Prism;
+use Prism\Prism\Facades\Prism;
 
 $response = Prism::audio()
     ->using('openai', 'gpt-4o-mini-tts')

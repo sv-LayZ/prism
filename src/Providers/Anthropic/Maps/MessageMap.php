@@ -43,7 +43,7 @@ class MessageMap
     public static function mapSystemMessages(array $messages): array
     {
         return array_map(
-            fn (Message $message): array => self::mapSystemMessage($message),
+            self::mapSystemMessage(...),
             $messages
         );
     }
@@ -167,6 +167,27 @@ class MessageMap
                 'input' => $toolCall->arguments() === [] ? new \stdClass : $toolCall->arguments(),
             ], $message->toolCalls)
             : [];
+
+        if (isset($message->additionalContent['provider_tool_calls'])) {
+            foreach ($message->additionalContent['provider_tool_calls'] as $toolCall) {
+                $content[] = array_filter([
+                    'type' => $toolCall['type'] ?? 'server_tool_use',
+                    'id' => $toolCall['id'] ?? null,
+                    'name' => $toolCall['name'] ?? null,
+                    'input' => isset($toolCall['input']) && $toolCall['input'] !== '' ? json_decode((string) $toolCall['input'], true) : new \stdClass,
+                ]);
+            }
+        }
+
+        if (isset($message->additionalContent['provider_tool_results'])) {
+            foreach ($message->additionalContent['provider_tool_results'] as $toolResult) {
+                $content[] = array_filter([
+                    'type' => $toolResult['type'],
+                    'tool_use_id' => $toolResult['tool_use_id'] ?? null,
+                    'content' => $toolResult['content'] ?? null,
+                ]);
+            }
+        }
 
         return [
             'role' => 'assistant',

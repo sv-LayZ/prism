@@ -13,9 +13,10 @@ use Prism\Prism\Enums\StreamEventType;
 use Prism\Prism\Exceptions\PrismProviderOverloadedException;
 use Prism\Prism\Exceptions\PrismRateLimitedException;
 use Prism\Prism\Exceptions\PrismRequestTooLargeException;
+use Prism\Prism\Facades\Prism;
 use Prism\Prism\Facades\Tool;
-use Prism\Prism\Prism;
 use Prism\Prism\Streaming\Events\CitationEvent;
+use Prism\Prism\Streaming\Events\ProviderToolEvent;
 use Prism\Prism\Streaming\Events\StreamEndEvent;
 use Prism\Prism\Streaming\Events\StreamEvent;
 use Prism\Prism\Streaming\Events\TextDeltaEvent;
@@ -266,6 +267,46 @@ describe('tools', function (): void {
         $firstToolResultEvent = $toolResultEvents[0];
         expect($firstToolResultEvent->toolResult->result)->not->toBeEmpty();
         expect($firstToolResultEvent->success)->toBeTrue();
+    });
+});
+
+describe('provider tools', function (): void {
+    it('handles provider tool calls and provider tool results in stream end event', function (): void {
+        FixtureResponse::fakeStreamResponses('v1/messages', 'anthropic/stream-with-web-search-citations');
+
+        $response = Prism::text()
+            ->using(Provider::Anthropic, 'claude-3-7-sonnet-20250219')
+            ->withPrompt('Get me the latest stock price for AAPL and the weather in New York City.')
+            ->withProviderTools([new ProviderTool(type: 'web_search_20250305', name: 'web_search')])
+            ->asStream();
+
+        $providerToolUses = [];
+        $providerToolResults = [];
+
+        foreach ($response as $event) {
+            if ($event instanceof ProviderToolEvent) {
+                if ($event->status === 'completed') {
+                    if (in_array($event->toolType, ['web_search', 'web_fetch'])) {
+                        $providerToolUses[] = $event->data;
+                    }
+                } elseif ($event->status === 'result_received') {
+                    $providerToolResults[] = $event->data;
+                }
+            }
+        }
+
+        // Check that provider tool calls are included in the additional content
+        expect(isset($providerToolUses))->toBeTrue();
+        expect(count($providerToolUses))->toBeGreaterThanOrEqual(1);
+        expect($providerToolUses[0]['type'])->toBe('server_tool_use');
+        expect($providerToolUses[0]['name'])->toBe('web_search');
+
+        // Check that provider tool results are included in the additional content
+        expect(isset($providerToolResults))->toBeTrue();
+        expect(count($providerToolResults))->toBeGreaterThanOrEqual(1);
+        expect($providerToolResults[0]['type'])->toBe('web_search_tool_result');
+        expect($providerToolResults[0]['content'])->toBeArray();
+        expect($providerToolResults[0]['tool_use_id'])->toBe($providerToolUses[0]['id']);
     });
 });
 
