@@ -50,3 +50,81 @@ it('returns structured output', function (): void {
     expect($response->structured['open_source'])->toBeArray();
 
 });
+
+describe('Keep alive parameter', function (): void {
+    it('includes keep_alive parameter with duration string for structured', function (): void {
+        FixtureResponse::fakeResponseSequence('api/chat', 'ollama/structured');
+
+        $schema = new ObjectSchema(
+            'output',
+            'the output object',
+            [new StringSchema('name', 'The users name')],
+            ['name']
+        );
+
+        Prism::structured()
+            ->withSchema($schema)
+            ->using(Provider::Ollama, 'deepseek-r1:14b-qwen-distill-q8_0')
+            ->withPrompt('Test prompt')
+            ->withProviderOptions(['keep_alive' => '10m'])
+            ->asStructured();
+
+        \Illuminate\Support\Facades\Http::assertSent(function (\Illuminate\Http\Client\Request $request): true {
+            $body = $request->data();
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe('10m');
+
+            return true;
+        });
+    });
+
+    it('includes keep_alive parameter with number for structured', function (): void {
+        FixtureResponse::fakeResponseSequence('api/chat', 'ollama/structured');
+
+        $schema = new ObjectSchema(
+            'output',
+            'the output object',
+            [new StringSchema('name', 'The users name')],
+            ['name']
+        );
+
+        Prism::structured()
+            ->withSchema($schema)
+            ->using(Provider::Ollama, 'deepseek-r1:14b-qwen-distill-q8_0')
+            ->withPrompt('Test prompt')
+            ->withProviderOptions(['keep_alive' => 3600])
+            ->asStructured();
+
+        \Illuminate\Support\Facades\Http::assertSent(function (\Illuminate\Http\Client\Request $request): true {
+            $body = $request->data();
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe(3600);
+
+            return true;
+        });
+    });
+
+    it('does not include keep_alive parameter when not provided for structured', function (): void {
+        FixtureResponse::fakeResponseSequence('api/chat', 'ollama/structured');
+
+        $schema = new ObjectSchema(
+            'output',
+            'the output object',
+            [new StringSchema('name', 'The users name')],
+            ['name']
+        );
+
+        Prism::structured()
+            ->withSchema($schema)
+            ->using(Provider::Ollama, 'deepseek-r1:14b-qwen-distill-q8_0')
+            ->withPrompt('Test prompt')
+            ->asStructured();
+
+        \Illuminate\Support\Facades\Http::assertSent(function (\Illuminate\Http\Client\Request $request): true {
+            $body = $request->data();
+            expect($body)->not->toHaveKey('keep_alive');
+
+            return true;
+        });
+    });
+});

@@ -71,3 +71,75 @@ it('works with multiple embeddings', function (): void {
     expect($response->embeddings[1]->embedding)->toBe($embeddings[1]->embedding);
     expect($response->usage->tokens)->toBe(522);
 });
+
+describe('Keep alive parameter', function (): void {
+    it('includes keep_alive parameter with duration string for embeddings', function (): void {
+        FixtureResponse::fakeResponseSequence('api/embed', 'ollama/embeddings-input');
+
+        Prism::embeddings()
+            ->using(Provider::Ollama, 'mxbai-embed-large')
+            ->fromInput('Test input')
+            ->withProviderOptions(['keep_alive' => '5m'])
+            ->asEmbeddings();
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe('5m');
+
+            return true;
+        });
+    });
+
+    it('includes keep_alive parameter with number for embeddings', function (): void {
+        FixtureResponse::fakeResponseSequence('api/embed', 'ollama/embeddings-input');
+
+        Prism::embeddings()
+            ->using(Provider::Ollama, 'mxbai-embed-large')
+            ->fromInput('Test input')
+            ->withProviderOptions(['keep_alive' => 300])
+            ->asEmbeddings();
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe(300);
+
+            return true;
+        });
+    });
+
+    it('includes keep_alive parameter with negative number for embeddings', function (): void {
+        FixtureResponse::fakeResponseSequence('api/embed', 'ollama/embeddings-input');
+
+        Prism::embeddings()
+            ->using(Provider::Ollama, 'mxbai-embed-large')
+            ->fromInput('Test input')
+            ->withProviderOptions(['keep_alive' => -1])
+            ->asEmbeddings();
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe(-1);
+
+            return true;
+        });
+    });
+
+    it('does not include keep_alive parameter when not provided for embeddings', function (): void {
+        FixtureResponse::fakeResponseSequence('api/embed', 'ollama/embeddings-input');
+
+        Prism::embeddings()
+            ->using(Provider::Ollama, 'mxbai-embed-large')
+            ->fromInput('Test input')
+            ->asEmbeddings();
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            expect($body)->not->toHaveKey('keep_alive');
+
+            return true;
+        });
+    });
+});
