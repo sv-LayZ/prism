@@ -308,12 +308,13 @@ class Stream
                 'stream' => true,
                 ...Arr::whereNotNull([
                     'think' => $request->providerOptions('thinking'),
+                    'keep_alive' => $request->providerOptions('keep_alive'),
                 ]),
                 'options' => Arr::whereNotNull(array_merge([
                     'temperature' => $request->temperature(),
                     'num_predict' => $request->maxTokens() ?? 2048,
                     'top_p' => $request->topP(),
-                ], $request->providerOptions())),
+                ], Arr::except($request->providerOptions(), ['thinking', 'keep_alive']))),
             ]);
     }
 

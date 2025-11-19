@@ -140,6 +140,140 @@ describe('Thinking parameter', function (): void {
     });
 });
 
+describe('Keep alive parameter', function (): void {
+    it('includes keep_alive parameter with duration string', function (): void {
+        FixtureResponse::fakeResponseSequence('api/chat', 'ollama/generate-text-with-a-prompt');
+
+        Prism::text()
+            ->using('ollama', 'qwen2.5:14b')
+            ->withPrompt('Test prompt')
+            ->withProviderOptions(['keep_alive' => '10m'])
+            ->asText();
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe('10m');
+
+            return true;
+        });
+    });
+
+    it('includes keep_alive parameter with number in seconds', function (): void {
+        FixtureResponse::fakeResponseSequence('api/chat', 'ollama/generate-text-with-a-prompt');
+
+        Prism::text()
+            ->using('ollama', 'qwen2.5:14b')
+            ->withPrompt('Test prompt')
+            ->withProviderOptions(['keep_alive' => 3600])
+            ->asText();
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe(3600);
+
+            return true;
+        });
+    });
+
+    it('includes keep_alive parameter with negative number', function (): void {
+        FixtureResponse::fakeResponseSequence('api/chat', 'ollama/generate-text-with-a-prompt');
+
+        Prism::text()
+            ->using('ollama', 'qwen2.5:14b')
+            ->withPrompt('Test prompt')
+            ->withProviderOptions(['keep_alive' => -1])
+            ->asText();
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe(-1);
+
+            return true;
+        });
+    });
+
+    it('includes keep_alive parameter with negative duration string', function (): void {
+        FixtureResponse::fakeResponseSequence('api/chat', 'ollama/generate-text-with-a-prompt');
+
+        Prism::text()
+            ->using('ollama', 'qwen2.5:14b')
+            ->withPrompt('Test prompt')
+            ->withProviderOptions(['keep_alive' => '-1m'])
+            ->asText();
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe('-1m');
+
+            return true;
+        });
+    });
+
+    it('includes keep_alive parameter with zero to unload immediately', function (): void {
+        FixtureResponse::fakeResponseSequence('api/chat', 'ollama/generate-text-with-a-prompt');
+
+        Prism::text()
+            ->using('ollama', 'qwen2.5:14b')
+            ->withPrompt('Test prompt')
+            ->withProviderOptions(['keep_alive' => 0])
+            ->asText();
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe(0);
+
+            return true;
+        });
+    });
+
+    it('does not include keep_alive parameter when not provided', function (): void {
+        FixtureResponse::fakeResponseSequence('api/chat', 'ollama/generate-text-with-a-prompt');
+
+        Prism::text()
+            ->using('ollama', 'qwen2.5:14b')
+            ->withPrompt('Test prompt')
+            ->asText();
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            expect($body)->not->toHaveKey('keep_alive');
+
+            return true;
+        });
+    });
+
+    it('excludes keep_alive from options array when provided', function (): void {
+        FixtureResponse::fakeResponseSequence('api/chat', 'ollama/generate-text-with-a-prompt');
+
+        Prism::text()
+            ->using('ollama', 'qwen2.5:14b')
+            ->withPrompt('Test prompt')
+            ->withProviderOptions(['keep_alive' => '10m', 'num_ctx' => 4096])
+            ->asText();
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            // keep_alive should be at top level
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe('10m');
+            
+            // keep_alive should NOT be in options array
+            expect($body['options'])->not->toHaveKey('keep_alive');
+            
+            // other provider options should still be in options
+            expect($body['options'])->toHaveKey('num_ctx');
+            expect($body['options']['num_ctx'])->toBe(4096);
+
+            return true;
+        });
+    });
+});
+
 describe('Image support', function (): void {
     it('can send images from path', function (): void {
         FixtureResponse::fakeResponseSequence('api/chat', 'ollama/image-detection');

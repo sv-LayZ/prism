@@ -214,3 +214,118 @@ it('emits thinking chunks when provider sends thinking field', function (): void
     expect($finalText)->toContain('Here is the answer:');
     expect($lastFinishReason)->toBe(FinishReason::Stop);
 });
+
+describe('Keep alive parameter', function (): void {
+    it('includes keep_alive parameter with duration string for streaming', function (): void {
+        FixtureResponse::fakeStreamResponses('api/chat', 'ollama/stream-basic-text');
+
+        $response = Prism::text()
+            ->using('ollama', 'granite3-dense:8b')
+            ->withPrompt('Test prompt')
+            ->withProviderOptions(['keep_alive' => '24h'])
+            ->asStream();
+
+        // Consume the stream to trigger the HTTP request
+        foreach ($response as $chunk) {
+            break;
+        }
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe('24h');
+
+            return true;
+        });
+    });
+
+    it('includes keep_alive parameter with number for streaming', function (): void {
+        FixtureResponse::fakeStreamResponses('api/chat', 'ollama/stream-basic-text');
+
+        $response = Prism::text()
+            ->using('ollama', 'granite3-dense:8b')
+            ->withPrompt('Test prompt')
+            ->withProviderOptions(['keep_alive' => 3600])
+            ->asStream();
+
+        // Consume the stream to trigger the HTTP request
+        foreach ($response as $chunk) {
+            break;
+        }
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe(3600);
+
+            return true;
+        });
+    });
+
+    it('includes keep_alive parameter with negative number for streaming', function (): void {
+        FixtureResponse::fakeStreamResponses('api/chat', 'ollama/stream-basic-text');
+
+        $response = Prism::text()
+            ->using('ollama', 'granite3-dense:8b')
+            ->withPrompt('Test prompt')
+            ->withProviderOptions(['keep_alive' => -1])
+            ->asStream();
+
+        // Consume the stream to trigger the HTTP request
+        foreach ($response as $chunk) {
+            break;
+        }
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe(-1);
+
+            return true;
+        });
+    });
+
+    it('includes keep_alive parameter with zero for streaming', function (): void {
+        FixtureResponse::fakeStreamResponses('api/chat', 'ollama/stream-basic-text');
+
+        $response = Prism::text()
+            ->using('ollama', 'granite3-dense:8b')
+            ->withPrompt('Test prompt')
+            ->withProviderOptions(['keep_alive' => 0])
+            ->asStream();
+
+        // Consume the stream to trigger the HTTP request
+        foreach ($response as $chunk) {
+            break;
+        }
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            expect($body)->toHaveKey('keep_alive');
+            expect($body['keep_alive'])->toBe(0);
+
+            return true;
+        });
+    });
+
+    it('does not include keep_alive parameter when not provided for streaming', function (): void {
+        FixtureResponse::fakeStreamResponses('api/chat', 'ollama/stream-basic-text');
+
+        $response = Prism::text()
+            ->using('ollama', 'granite3-dense:8b')
+            ->withPrompt('Test prompt')
+            ->asStream();
+
+        // Consume the stream to trigger the HTTP request
+        foreach ($response as $chunk) {
+            break;
+        }
+
+        Http::assertSent(function (Request $request): true {
+            $body = $request->data();
+            expect($body)->not->toHaveKey('keep_alive');
+
+            return true;
+        });
+    });
+});

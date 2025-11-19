@@ -47,7 +47,8 @@ class Embeddings
             Arr::whereNotNull([
                 'model' => $request->model(),
                 'input' => $request->inputs(),
-                'options' => $request->providerOptions() ?: null,
+                'keep_alive' => $request->providerOptions('keep_alive'),
+                'options' => Arr::except($request->providerOptions(), ['keep_alive']) ?: null,
             ])
         );
     }
